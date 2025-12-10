@@ -5,29 +5,50 @@ mod tui;
 
 use anyhow::{Context, Result};
 use app::App;
+use clap::Parser;
 use russh_sftp::client::SftpSession;
 use ssh::SshClient;
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tui::{handle_input, InputAction, Tui};
+
+#[derive(Parser)]
+#[command(name = "bssh")]
+#[command(about = "Better SSH - A modern SSH file browser with TUI", long_about = None)]
+#[command(version)]
+struct Cli {
+    /// SSH connection string [user@]host[:port]
+    #[arg(value_name = "DESTINATION")]
+    destination: String,
+
+    /// Initial remote directory path
+    #[arg(value_name = "PATH")]
+    path: Option<String>,
+
+    /// Identity file (private key) for authentication
+    #[arg(short = 'i', long = "identity", value_name = "FILE")]
+    identity: Option<PathBuf>,
+
+    /// Port to connect to on the remote host
+    #[arg(short = 'p', long = "port", value_name = "PORT")]
+    port: Option<u16>,
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
+    let cli = Cli::parse();
 
-    if args.len() < 2 {
-        eprintln!("Usage: bssh [user@]host[:port] [/initial/path]");
-        eprintln!("Example: bssh user@example.com /home/user");
-        eprintln!("         bssh example.com:2222");
-        std::process::exit(1);
-    }
-
-    let (username, host, port) = parse_connection_string(&args[1])?;
-    let initial_path = args.get(2).map(|s| s.as_str()).unwrap_or("/");
+    let (username, host, default_port) = parse_connection_string(&cli.destination)?;
+    let port = cli.port.unwrap_or(default_port);
+    let initial_path = cli.path.as_deref().unwrap_or("/");
+    let key_path = cli.identity.as_deref();
 
     println!("Connecting to {}@{}:{}...", username, host, port);
+    if let Some(key) = key_path {
+        println!("Using identity file: {}", key.display());
+    }
 
-    let mut ssh_client = SshClient::connect(&host, port, &username, None)
+    let mut ssh_client = SshClient::connect(&host, port, &username, key_path)
         .await
         .context("Failed to establish SSH connection")?;
 
