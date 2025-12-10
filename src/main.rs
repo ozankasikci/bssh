@@ -110,7 +110,7 @@ async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: Str
                         let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
                         let command = format!("{} '{}'", editor, file.path);
 
-                        // Suspend TUI
+                        // Suspend TUI (exits alternate screen, disables raw mode)
                         tui.restore()?;
 
                         // Execute editor on remote server
@@ -123,15 +123,7 @@ async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: Str
                             }
                         }
 
-                        // Clear screen and reset terminal before resuming TUI
-                        print!("\x1b[2J\x1b[H"); // Clear screen and move cursor to top
-                        use std::io::Write;
-                        std::io::stdout().flush()?;
-
-                        // Small delay to let terminal settle
-                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-                        // Resume TUI
+                        // Resume TUI (re-enters alternate screen, re-enables raw mode)
                         tui = Tui::new()?;
                     }
                 }

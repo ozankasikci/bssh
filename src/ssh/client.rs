@@ -124,7 +124,7 @@ impl SshClient {
     }
 
     pub async fn execute_interactive(&mut self, command: &str) -> Result<()> {
-        use std::os::unix::io::AsRawFd;
+        use crossterm::{execute, terminal};
 
         let mut channel = self
             .session
@@ -133,7 +133,7 @@ impl SshClient {
             .context("Failed to open channel")?;
 
         // Get terminal size
-        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+        let (cols, rows) = terminal::size().unwrap_or((80, 24));
 
         // Request a PTY for interactive programs like vim
         channel
@@ -154,12 +154,8 @@ impl SshClient {
             .await
             .context("Failed to execute command")?;
 
-        // Set terminal to raw mode for direct input
-        let stdin_fd = std::io::stdin().as_raw_fd();
-        let termios_original = termios::Termios::from_fd(stdin_fd)?;
-        let mut termios_raw = termios_original.clone();
-        termios::cfmakeraw(&mut termios_raw);
-        termios::tcsetattr(stdin_fd, termios::TCSAFLUSH, &termios_raw)?;
+        // Enable raw mode using crossterm (consistent with TUI)
+        terminal::enable_raw_mode()?;
 
         // Channel stream for reading/writing
         let mut stream = channel.into_stream();
@@ -194,17 +190,11 @@ impl SshClient {
             }
         }
 
-        // Restore terminal state
-        termios::tcsetattr(stdin_fd, termios::TCSAFLUSH, &termios_original)?;
-
         // Abort stdin task
         stdin_task.abort();
 
-        // Extra terminal cleanup - reset to sane state
-        print!("\x1b[?25h"); // Show cursor
-        print!("\x1b[m");    // Reset attributes
-        use std::io::Write;
-        std::io::stdout().flush()?;
+        // Disable raw mode (will be re-enabled by TUI::new())
+        terminal::disable_raw_mode()?;
 
         Ok(())
     }
