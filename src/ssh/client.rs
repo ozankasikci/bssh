@@ -125,7 +125,6 @@ impl SshClient {
 
     pub async fn execute_interactive(&mut self, command: &str) -> Result<()> {
         use std::os::unix::io::AsRawFd;
-        use std::io::{Read, Write};
 
         let mut channel = self
             .session
@@ -133,13 +132,16 @@ impl SshClient {
             .await
             .context("Failed to open channel")?;
 
+        // Get terminal size
+        let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
         // Request a PTY for interactive programs like vim
         channel
             .request_pty(
                 true,
                 "xterm-256color",
-                80,
-                24,
+                cols as u32,
+                rows as u32,
                 0,
                 0,
                 &[], // no terminal modes
@@ -157,7 +159,7 @@ impl SshClient {
         let termios_original = termios::Termios::from_fd(stdin_fd)?;
         let mut termios_raw = termios_original.clone();
         termios::cfmakeraw(&mut termios_raw);
-        termios::tcsetattr(stdin_fd, termios::TCSANOW, &termios_raw)?;
+        termios::tcsetattr(stdin_fd, termios::TCSAFLUSH, &termios_raw)?;
 
         // Channel stream for reading/writing
         let mut stream = channel.into_stream();
@@ -192,10 +194,17 @@ impl SshClient {
             }
         }
 
-        // Restore terminal
-        termios::tcsetattr(stdin_fd, termios::TCSANOW, &termios_original)?;
+        // Restore terminal state
+        termios::tcsetattr(stdin_fd, termios::TCSAFLUSH, &termios_original)?;
 
+        // Abort stdin task
         stdin_task.abort();
+
+        // Extra terminal cleanup - reset to sane state
+        print!("\x1b[?25h"); // Show cursor
+        print!("\x1b[m");    // Reset attributes
+        use std::io::Write;
+        std::io::stdout().flush()?;
 
         Ok(())
     }

@@ -123,6 +123,14 @@ async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: Str
                             }
                         }
 
+                        // Clear screen and reset terminal before resuming TUI
+                        print!("\x1b[2J\x1b[H"); // Clear screen and move cursor to top
+                        use std::io::Write;
+                        std::io::stdout().flush()?;
+
+                        // Small delay to let terminal settle
+                        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
                         // Resume TUI
                         tui = Tui::new()?;
                     }
