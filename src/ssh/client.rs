@@ -196,6 +196,12 @@ impl SshClient {
         // Disable raw mode (will be re-enabled by TUI::new())
         terminal::disable_raw_mode()?;
 
+        // Flush any remaining input to prevent escape sequences leaking
+        use crossterm::event::{self, Event};
+        while event::poll(std::time::Duration::from_millis(10))? {
+            event::read()?; // Consume and discard
+        }
+
         Ok(())
     }
 }
