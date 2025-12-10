@@ -10,6 +10,8 @@ A modern, user-friendly SSH file browser with a Terminal User Interface (TUI) bu
 - 📥 Download files from remote server
 - 🗑️ Delete files and directories
 - 🔐 SSH key-based authentication
+- 💾 Session persistence - remembers your last directory and cursor position
+- ✏️ Built-in modal text editor (vim-like)
 - 📝 ~/.ssh/config integration
 
 ## Installation
@@ -111,6 +113,23 @@ Press **Enter** on a file to open it in the built-in modal editor. The editor wo
 | Arrow keys | Move cursor |
 
 The file is edited **directly on the remote server** via SFTP - no temporary files needed!
+
+## Session Persistence
+
+bssh automatically remembers your session state for each server connection:
+
+- **Last directory**: Returns to the directory you were browsing when you last quit
+- **Cursor position**: Restores your selected file/directory
+- **Per-connection**: Each server connection (user@host:port) has its own saved state
+- **Editor restore**: When you close a file in the editor, you return to the exact same location in the file browser
+
+State is saved:
+- When you quit the application
+- Before opening a file in the editor (so closing the editor returns you to the same spot)
+
+State files are stored in `~/.config/bssh/session_user@host_port.json`
+
+**Note**: If you explicitly provide a path when launching bssh, it will use that path instead of the saved state.
 
 ## Authentication
 

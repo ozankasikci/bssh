@@ -2,6 +2,7 @@ mod app;
 mod editor;
 mod file_ops;
 mod ssh;
+mod state;
 mod tui;
 
 use anyhow::{Context, Result};
@@ -10,6 +11,7 @@ use clap::Parser;
 use editor::{load_file_content, save_file_content, EditorState, handle_editor_input, render_editor};
 use russh_sftp::client::SftpSession;
 use ssh::SshClient;
+use state::SessionState;
 use std::env;
 use std::path::PathBuf;
 use tui::{handle_input, InputAction, Tui};
@@ -42,7 +44,6 @@ async fn main() -> Result<()> {
 
     let (username, host, default_port) = parse_connection_string(&cli.destination)?;
     let port = cli.port.unwrap_or(default_port);
-    let initial_path = cli.path.as_deref().unwrap_or("/");
     let key_path = cli.identity.as_deref();
 
     println!("Connecting to {}@{}:{}...", username, host, port);
@@ -61,7 +62,28 @@ async fn main() -> Result<()> {
 
     println!("Connected! Starting TUI...");
 
-    run_app(ssh_client, sftp, initial_path.to_string()).await?;
+    // Try to load saved state for this connection
+    let (initial_path, initial_index) = if let Some(path_arg) = cli.path.as_deref() {
+        // If path was explicitly provided, use it
+        (path_arg.to_string(), 0)
+    } else if let Some(state) = SessionState::load(&host, port, &username) {
+        // Load from saved state
+        println!("Restoring previous session: {}", state.current_path);
+        (state.current_path, state.selected_index)
+    } else {
+        // Default to root
+        ("/".to_string(), 0)
+    };
+
+    run_app(
+        ssh_client,
+        sftp,
+        host.clone(),
+        port,
+        username.clone(),
+        initial_path,
+        initial_index
+    ).await?;
 
     Ok(())
 }
@@ -110,15 +132,29 @@ async fn open_in_editor(
     Ok(saved)
 }
 
-async fn run_app(ssh_client: SshClient, sftp: SftpSession, initial_path: String) -> Result<()> {
+async fn run_app(
+    _ssh_client: SshClient,
+    sftp: SftpSession,
+    host: String,
+    port: u16,
+    username: String,
+    initial_path: String,
+    initial_index: usize,
+) -> Result<()> {
     let mut app = App::new();
     app.current_path = initial_path;
+    app.selected_index = initial_index;
 
     let mut tui = Tui::new()?;
 
     app.files = file_ops::list_directory(&sftp, &app.current_path)
         .await
         .unwrap_or_default();
+
+    // Clamp selected index to valid range
+    if app.selected_index >= app.files.len() && !app.files.is_empty() {
+        app.selected_index = app.files.len() - 1;
+    }
 
     loop {
         tui.draw(&app)?;
@@ -152,6 +188,16 @@ async fn run_app(ssh_client: SshClient, sftp: SftpSession, initial_path: String)
                             }
                         }
                     } else {
+                        // Save state before opening editor so we can restore position
+                        let state = SessionState::new(
+                            host.clone(),
+                            port,
+                            username.clone(),
+                            app.current_path.clone(),
+                            app.selected_index,
+                        );
+                        let _ = state.save();
+
                         // Open file in built-in editor
                         match open_in_editor(&sftp, &file.path, &file.name, &mut tui).await {
                             Ok(saved) => {
@@ -235,6 +281,16 @@ async fn run_app(ssh_client: SshClient, sftp: SftpSession, initial_path: String)
             break;
         }
     }
+
+    // Save state before quitting
+    let state = SessionState::new(
+        host,
+        port,
+        username,
+        app.current_path,
+        app.selected_index,
+    );
+    let _ = state.save();
 
     tui.restore()?;
     Ok(())
