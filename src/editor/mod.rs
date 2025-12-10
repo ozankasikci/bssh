@@ -121,7 +121,8 @@ impl EditorState {
 
         if self.cursor_col < max_col {
             self.cursor_col += 1;
-        } else if self.cursor_row < self.buffer.len() - 1 {
+        } else if self.mode == EditorMode::Insert && self.cursor_row < self.buffer.len() - 1 {
+            // Only wrap to next line in Insert mode
             self.cursor_row += 1;
             self.cursor_col = 0;
         }
@@ -443,5 +444,562 @@ fn handle_command_mode(editor: &mut EditorState, key: KeyEvent) {
             editor.mode = EditorMode::Normal;
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_editor() -> EditorState {
+        let content = "line 1\nline 2\nline 3".to_string();
+        EditorState::new("test.txt".to_string(), "/tmp/test.txt".to_string(), content)
+    }
+
+    fn create_empty_editor() -> EditorState {
+        EditorState::new("empty.txt".to_string(), "/tmp/empty.txt".to_string(), String::new())
+    }
+
+    // ===== Cursor Movement Tests =====
+
+    #[test]
+    fn test_move_cursor_down() {
+        let mut editor = create_test_editor();
+        assert_eq!(editor.cursor_row, 0);
+
+        editor.move_cursor_down();
+        assert_eq!(editor.cursor_row, 1);
+
+        editor.move_cursor_down();
+        assert_eq!(editor.cursor_row, 2);
+
+        // Should not move past last line
+        editor.move_cursor_down();
+        assert_eq!(editor.cursor_row, 2);
+    }
+
+    #[test]
+    fn test_move_cursor_up() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 2;
+
+        editor.move_cursor_up();
+        assert_eq!(editor.cursor_row, 1);
+
+        editor.move_cursor_up();
+        assert_eq!(editor.cursor_row, 0);
+
+        // Should not move past first line
+        editor.move_cursor_up();
+        assert_eq!(editor.cursor_row, 0);
+    }
+
+    #[test]
+    fn test_move_cursor_right() {
+        let mut editor = create_test_editor();
+        assert_eq!(editor.cursor_col, 0);
+
+        editor.move_cursor_right();
+        assert_eq!(editor.cursor_col, 1);
+
+        // Move to end of line
+        for _ in 0..4 {
+            editor.move_cursor_right();
+        }
+        assert_eq!(editor.cursor_col, 5); // "line 1" has 6 chars, max col in normal mode is 5
+
+        // Should not move past end of line in normal mode
+        editor.move_cursor_right();
+        assert_eq!(editor.cursor_col, 5);
+    }
+
+    #[test]
+    fn test_move_cursor_right_wraps_to_next_line() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+
+        // Move to end of first line
+        for _ in 0..6 {
+            editor.move_cursor_right();
+        }
+
+        // Should wrap to next line
+        editor.move_cursor_right();
+        assert_eq!(editor.cursor_row, 1);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_move_cursor_left() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 3;
+
+        editor.move_cursor_left();
+        assert_eq!(editor.cursor_col, 2);
+
+        editor.move_cursor_left();
+        assert_eq!(editor.cursor_col, 1);
+
+        editor.move_cursor_left();
+        assert_eq!(editor.cursor_col, 0);
+
+        // Should not move past start of line when at row 0
+        editor.move_cursor_left();
+        assert_eq!(editor.cursor_col, 0);
+        assert_eq!(editor.cursor_row, 0);
+    }
+
+    #[test]
+    fn test_move_cursor_left_wraps_to_previous_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 1;
+        editor.cursor_col = 0;
+
+        editor.move_cursor_left();
+        assert_eq!(editor.cursor_row, 0);
+        assert_eq!(editor.cursor_col, 5); // End of "line 1" in normal mode
+    }
+
+    #[test]
+    fn test_move_to_line_start() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 5;
+
+        editor.move_to_line_start();
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_move_to_line_end() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 0;
+
+        editor.move_to_line_end();
+        assert_eq!(editor.cursor_col, 5); // "line 1" in normal mode
+
+        // In insert mode, should go one past
+        editor.mode = EditorMode::Insert;
+        editor.cursor_col = 0;
+        editor.move_to_line_end();
+        assert_eq!(editor.cursor_col, 6);
+    }
+
+    #[test]
+    fn test_move_to_buffer_start() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 2;
+        editor.cursor_col = 3;
+
+        editor.move_to_buffer_start();
+        assert_eq!(editor.cursor_row, 0);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_move_to_buffer_end() {
+        let mut editor = create_test_editor();
+
+        editor.move_to_buffer_end();
+        assert_eq!(editor.cursor_row, 2);
+        assert_eq!(editor.cursor_col, 5); // End of "line 3"
+    }
+
+    // ===== Text Editing Tests =====
+
+    #[test]
+    fn test_insert_char() {
+        let mut editor = create_empty_editor();
+        editor.mode = EditorMode::Insert;
+
+        editor.insert_char('H');
+        assert_eq!(editor.buffer[0], "H");
+        assert_eq!(editor.cursor_col, 1);
+        assert!(editor.modified);
+
+        editor.insert_char('i');
+        assert_eq!(editor.buffer[0], "Hi");
+        assert_eq!(editor.cursor_col, 2);
+    }
+
+    #[test]
+    fn test_insert_char_in_middle() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+        editor.cursor_col = 4; // After "line"
+
+        editor.insert_char('X');
+        assert_eq!(editor.buffer[0], "lineX 1");
+        assert_eq!(editor.cursor_col, 5);
+    }
+
+    #[test]
+    fn test_delete_char() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+        editor.cursor_col = 4;
+
+        editor.delete_char();
+        assert_eq!(editor.buffer[0], "lin 1");
+        assert_eq!(editor.cursor_col, 3);
+        assert!(editor.modified);
+    }
+
+    #[test]
+    fn test_delete_char_at_line_start_joins_lines() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+        editor.cursor_row = 1;
+        editor.cursor_col = 0;
+
+        editor.delete_char();
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.buffer[0], "line 1line 2");
+        assert_eq!(editor.cursor_row, 0);
+        assert_eq!(editor.cursor_col, 6);
+    }
+
+    #[test]
+    fn test_insert_newline() {
+        let mut editor = create_empty_editor();
+        editor.mode = EditorMode::Insert;
+        editor.insert_char('H');
+        editor.insert_char('i');
+
+        editor.insert_newline();
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.buffer[0], "Hi");
+        assert_eq!(editor.buffer[1], "");
+        assert_eq!(editor.cursor_row, 1);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_insert_newline_splits_line() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+        editor.cursor_col = 4; // After "line"
+
+        editor.insert_newline();
+        assert_eq!(editor.buffer.len(), 4);
+        assert_eq!(editor.buffer[0], "line");
+        assert_eq!(editor.buffer[1], " 1");
+        assert_eq!(editor.cursor_row, 1);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    // ===== Line Operation Tests =====
+
+    #[test]
+    fn test_delete_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 1;
+
+        editor.delete_line();
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.buffer[0], "line 1");
+        assert_eq!(editor.buffer[1], "line 3");
+        assert_eq!(editor.yank_register, vec!["line 2"]);
+        assert!(editor.modified);
+    }
+
+    #[test]
+    fn test_delete_last_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 2;
+
+        editor.delete_line();
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.cursor_row, 1); // Should move up
+    }
+
+    #[test]
+    fn test_delete_only_line() {
+        let mut editor = create_empty_editor();
+        editor.buffer[0] = "test".to_string();
+
+        editor.delete_line();
+        assert_eq!(editor.buffer.len(), 1);
+        assert_eq!(editor.buffer[0], "");
+        assert_eq!(editor.yank_register, vec!["test"]);
+    }
+
+    #[test]
+    fn test_yank_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_row = 1;
+
+        editor.yank_line();
+        assert_eq!(editor.yank_register, vec!["line 2"]);
+        assert!(!editor.modified); // Yank doesn't modify
+    }
+
+    #[test]
+    fn test_paste_below() {
+        let mut editor = create_test_editor();
+        editor.yank_register = vec!["pasted line".to_string()];
+        editor.cursor_row = 0;
+
+        editor.paste_below();
+        assert_eq!(editor.buffer.len(), 4);
+        assert_eq!(editor.buffer[0], "line 1");
+        assert_eq!(editor.buffer[1], "pasted line");
+        assert_eq!(editor.buffer[2], "line 2");
+        assert_eq!(editor.cursor_row, 1);
+        assert!(editor.modified);
+    }
+
+    #[test]
+    fn test_paste_multiple_lines() {
+        let mut editor = create_test_editor();
+        editor.yank_register = vec!["line A".to_string(), "line B".to_string()];
+        editor.cursor_row = 0;
+
+        editor.paste_below();
+        assert_eq!(editor.buffer.len(), 5);
+        assert_eq!(editor.buffer[1], "line A");
+        assert_eq!(editor.buffer[2], "line B");
+    }
+
+    // ===== Mode Switching Tests =====
+
+    #[test]
+    fn test_mode_starts_in_normal() {
+        let editor = create_test_editor();
+        assert_eq!(editor.mode, EditorMode::Normal);
+    }
+
+    #[test]
+    fn test_normal_mode_cursor_clamping() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+        editor.cursor_col = 6; // At end of line in insert mode
+
+        editor.mode = EditorMode::Normal;
+        editor.clamp_cursor();
+        assert_eq!(editor.cursor_col, 5); // Should clamp to last char
+    }
+
+    #[test]
+    fn test_insert_mode_allows_past_end() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+
+        editor.move_to_line_end();
+        assert_eq!(editor.cursor_col, 6); // Can be at end
+    }
+
+    // ===== Command Execution Tests =====
+
+    #[test]
+    fn test_command_write() {
+        let mut editor = create_test_editor();
+
+        editor.execute_command("w");
+        assert_eq!(editor.status_message, "Saving...");
+        assert!(!editor.should_quit);
+    }
+
+    #[test]
+    fn test_command_quit_with_modifications() {
+        let mut editor = create_test_editor();
+        editor.modified = true;
+
+        editor.execute_command("q");
+        assert!(editor.status_message.contains("No write since last change"));
+        assert!(!editor.should_quit);
+    }
+
+    #[test]
+    fn test_command_quit_without_modifications() {
+        let mut editor = create_test_editor();
+        editor.modified = false;
+
+        editor.execute_command("q");
+        assert!(editor.should_quit);
+    }
+
+    #[test]
+    fn test_command_force_quit() {
+        let mut editor = create_test_editor();
+        editor.modified = true;
+
+        editor.execute_command("q!");
+        assert!(editor.should_quit);
+    }
+
+    #[test]
+    fn test_command_write_quit() {
+        let mut editor = create_test_editor();
+
+        editor.execute_command("wq");
+        assert_eq!(editor.status_message, "Saving and quitting...");
+    }
+
+    #[test]
+    fn test_command_unknown() {
+        let mut editor = create_test_editor();
+
+        editor.execute_command("unknown");
+        assert!(editor.status_message.contains("Unknown command"));
+    }
+
+    // ===== Scroll Logic Tests =====
+
+    #[test]
+    fn test_scroll_down_when_cursor_moves_off_screen() {
+        let mut editor = create_test_editor();
+        editor.scroll_offset = 0;
+        editor.cursor_row = 10;
+
+        editor.update_scroll(5); // viewport height = 5
+
+        // Should scroll to keep cursor visible
+        assert!(editor.scroll_offset > 0);
+        assert!(editor.cursor_row >= editor.scroll_offset);
+        assert!(editor.cursor_row < editor.scroll_offset + 5);
+    }
+
+    #[test]
+    fn test_scroll_up_when_cursor_moves_above_viewport() {
+        let mut editor = create_test_editor();
+        editor.scroll_offset = 10;
+        editor.cursor_row = 5;
+
+        editor.update_scroll(5);
+
+        // Should scroll up to show cursor
+        assert!(editor.scroll_offset <= editor.cursor_row);
+    }
+
+    // ===== Edge Cases =====
+
+    #[test]
+    fn test_empty_file_handling() {
+        let editor = create_empty_editor();
+        assert_eq!(editor.buffer.len(), 1);
+        assert_eq!(editor.buffer[0], "");
+    }
+
+    #[test]
+    fn test_cursor_clamping_on_shorter_line() {
+        let mut editor = create_test_editor();
+        editor.buffer = vec![
+            "long line here".to_string(),
+            "short".to_string(),
+        ];
+        editor.cursor_col = 10;
+        editor.cursor_row = 0;
+
+        editor.move_cursor_down();
+        // Cursor should clamp to shorter line
+        assert_eq!(editor.cursor_col, 4); // "short" has 5 chars, max col is 4 in normal mode
+    }
+
+    #[test]
+    fn test_file_paths_stored_correctly() {
+        let editor = EditorState::new(
+            "test.conf".to_string(),
+            "/etc/test.conf".to_string(),
+            "config=value".to_string(),
+        );
+
+        assert_eq!(editor.filename, "test.conf");
+        assert_eq!(editor.remote_path, "/etc/test.conf");
+    }
+
+    #[test]
+    fn test_modified_flag() {
+        let mut editor = create_empty_editor();
+        assert!(!editor.modified);
+
+        editor.mode = EditorMode::Insert;
+        editor.insert_char('a');
+        assert!(editor.modified);
+    }
+
+    // ===== Integration-style Tests =====
+
+    #[test]
+    fn test_full_editing_workflow() {
+        let mut editor = create_empty_editor();
+        editor.mode = EditorMode::Insert;
+
+        // Type "Hello"
+        for c in "Hello".chars() {
+            editor.insert_char(c);
+        }
+
+        // New line
+        editor.insert_newline();
+
+        // Type "World"
+        for c in "World".chars() {
+            editor.insert_char(c);
+        }
+
+        assert_eq!(editor.buffer.len(), 2);
+        assert_eq!(editor.buffer[0], "Hello");
+        assert_eq!(editor.buffer[1], "World");
+        assert_eq!(editor.cursor_row, 1);
+        assert_eq!(editor.cursor_col, 5);
+    }
+
+    #[test]
+    fn test_delete_and_paste_workflow() {
+        let mut editor = create_test_editor();
+
+        // Delete line 2 (cursor at row 0, move down once)
+        editor.move_cursor_down();
+        editor.delete_line();
+
+        // Paste it at the end
+        editor.move_to_buffer_end();
+        editor.paste_below();
+
+        assert_eq!(editor.buffer.len(), 3);
+        assert_eq!(editor.buffer[0], "line 1");
+        assert_eq!(editor.buffer[1], "line 3");
+        assert_eq!(editor.buffer[2], "line 2");
+    }
+
+    #[test]
+    fn test_navigation_and_editing_combo() {
+        let mut editor = create_test_editor();
+        editor.mode = EditorMode::Insert;
+
+        // Go to end of first line
+        editor.move_to_line_end();
+
+        // Add exclamation
+        editor.insert_char('!');
+
+        // Go to start of next line
+        editor.move_cursor_down();
+        editor.move_to_line_start();
+
+        // Insert at beginning
+        editor.insert_char('>');
+
+        assert_eq!(editor.buffer[0], "line 1!");
+        assert_eq!(editor.buffer[1], ">line 2");
+    }
+
+    #[test]
+    fn test_multiline_paste() {
+        let mut editor = create_empty_editor();
+
+        // Set up multiline yank register
+        editor.yank_register = vec![
+            "first".to_string(),
+            "second".to_string(),
+            "third".to_string(),
+        ];
+
+        editor.paste_below();
+
+        assert_eq!(editor.buffer.len(), 4); // original empty + 3 pasted
+        assert_eq!(editor.buffer[1], "first");
+        assert_eq!(editor.buffer[2], "second");
+        assert_eq!(editor.buffer[3], "third");
     }
 }
