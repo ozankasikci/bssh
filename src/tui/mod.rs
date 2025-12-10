@@ -57,7 +57,7 @@ fn ui(f: &mut Frame, app: &App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(5),
             Constraint::Min(0),
             Constraint::Length(3),
         ])
@@ -77,6 +77,10 @@ fn render_header(f: &mut Frame, area: Rect, app: &App) {
         Line::from(vec![
             Span::styled("Path: ", Style::default().fg(Color::Yellow)),
             Span::raw(&app.current_path),
+        ]),
+        Line::from(vec![
+            Span::styled("Actions: ", Style::default().fg(Color::Green)),
+            Span::raw("Enter=Open  d=Download  Del=Delete  q=Quit"),
         ]),
     ])
     .block(Block::default().borders(Borders::ALL).title("Info"));
