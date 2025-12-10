@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use futures::future::join_all;
 use russh_sftp::client::SftpSession;
 use std::path::Path;
 use tokio::fs::File;
@@ -26,6 +27,9 @@ pub async fn list_directory(sftp: &SftpSession, path: &str) -> Result<Vec<FileEn
         });
     }
 
+    // Collect file info first
+    let mut file_info: Vec<(String, String)> = Vec::new();
+
     for entry in entries {
         let filename = entry.file_name();
 
@@ -40,10 +44,22 @@ pub async fn list_directory(sftp: &SftpSession, path: &str) -> Result<Vec<FileEn
             format!("{}/{}", path, filename)
         };
 
-        // Try to get metadata via stat
-        let metadata = sftp.metadata(&full_path).await.ok();
+        file_info.push((filename.to_string(), full_path));
+    }
 
-        // Try to get metadata via stat
+    // Create futures for all metadata fetches with owned strings
+    let metadata_futures: Vec<_> = file_info
+        .iter()
+        .map(|(_, path)| sftp.metadata(path))
+        .collect();
+
+    // Fetch all metadata concurrently (this is the speedup!)
+    let metadata_results = join_all(metadata_futures).await;
+
+    // Process results
+    for ((filename, full_path), metadata_result) in file_info.into_iter().zip(metadata_results) {
+        let metadata = metadata_result.ok();
+
         let (is_dir, size, modified) = if let Some(meta) = metadata {
             let modified_time = meta.modified().ok().and_then(|t| {
                 t.duration_since(std::time::UNIX_EPOCH)
@@ -62,7 +78,7 @@ pub async fn list_directory(sftp: &SftpSession, path: &str) -> Result<Vec<FileEn
         };
 
         files.push(FileEntry {
-            name: filename.to_string(),
+            name: filename,
             path: full_path,
             is_dir,
             size,
