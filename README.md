@@ -90,6 +90,10 @@ Press **Enter** on a file to open it in the built-in modal editor. The editor wo
 | `$` | Move to end of line |
 | `gg` | Move to start of file |
 | `G` | Move to end of file |
+| `Ctrl+D` | Page down (half page) |
+| `Ctrl+U` | Page up (half page) |
+| `Ctrl+F` | Full page down |
+| `Ctrl+B` | Full page up |
 | `i` | Enter insert mode at cursor |
 | `a` | Enter insert mode after cursor |
 | `o` | Open new line below and enter insert mode |
@@ -97,6 +101,8 @@ Press **Enter** on a file to open it in the built-in modal editor. The editor wo
 | `yy` | Yank (copy) current line |
 | `p` | Paste below current line |
 | `x` | Delete character at cursor |
+| `u` | Undo last change |
+| `Ctrl+R` | Redo |
 | `:w` | Save file |
 | `:q` | Quit (warns if unsaved changes) |
 | `:wq` | Save and quit |

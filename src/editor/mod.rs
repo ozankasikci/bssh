@@ -19,6 +19,13 @@ pub enum EditorMode {
     Search,
 }
 
+#[derive(Debug, Clone)]
+struct BufferSnapshot {
+    buffer: Vec<String>,
+    cursor_row: usize,
+    cursor_col: usize,
+}
+
 pub struct EditorState {
     pub buffer: Vec<String>,
     pub cursor_row: usize,
@@ -33,6 +40,8 @@ pub struct EditorState {
     pub remote_path: String,
     pub modified: bool,
     pub should_quit: bool,
+    undo_stack: Vec<BufferSnapshot>,
+    redo_stack: Vec<BufferSnapshot>,
 }
 
 impl EditorState {
@@ -57,7 +66,93 @@ impl EditorState {
             remote_path,
             modified: false,
             should_quit: false,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
         }
+    }
+
+    fn save_undo_state(&mut self) {
+        let snapshot = BufferSnapshot {
+            buffer: self.buffer.clone(),
+            cursor_row: self.cursor_row,
+            cursor_col: self.cursor_col,
+        };
+        self.undo_stack.push(snapshot);
+        // Clear redo stack when new action is performed
+        self.redo_stack.clear();
+
+        // Limit undo stack size to prevent excessive memory usage
+        if self.undo_stack.len() > 1000 {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    pub fn undo(&mut self) {
+        if let Some(snapshot) = self.undo_stack.pop() {
+            // Save current state to redo stack
+            let current = BufferSnapshot {
+                buffer: self.buffer.clone(),
+                cursor_row: self.cursor_row,
+                cursor_col: self.cursor_col,
+            };
+            self.redo_stack.push(current);
+
+            // Restore previous state
+            self.buffer = snapshot.buffer;
+            self.cursor_row = snapshot.cursor_row;
+            self.cursor_col = snapshot.cursor_col;
+            self.clamp_cursor();
+            self.status_message = String::from("Undo");
+        } else {
+            self.status_message = String::from("Nothing to undo");
+        }
+    }
+
+    pub fn redo(&mut self) {
+        if let Some(snapshot) = self.redo_stack.pop() {
+            // Save current state to undo stack
+            let current = BufferSnapshot {
+                buffer: self.buffer.clone(),
+                cursor_row: self.cursor_row,
+                cursor_col: self.cursor_col,
+            };
+            self.undo_stack.push(current);
+
+            // Restore redo state
+            self.buffer = snapshot.buffer;
+            self.cursor_row = snapshot.cursor_row;
+            self.cursor_col = snapshot.cursor_col;
+            self.clamp_cursor();
+            self.status_message = String::from("Redo");
+        } else {
+            self.status_message = String::from("Nothing to redo");
+        }
+    }
+
+    pub fn page_down(&mut self, viewport_height: usize) {
+        let half_page = viewport_height / 2;
+        let new_row = (self.cursor_row + half_page).min(self.buffer.len().saturating_sub(1));
+        self.cursor_row = new_row;
+        self.clamp_cursor();
+    }
+
+    pub fn page_up(&mut self, viewport_height: usize) {
+        let half_page = viewport_height / 2;
+        let new_row = self.cursor_row.saturating_sub(half_page);
+        self.cursor_row = new_row;
+        self.clamp_cursor();
+    }
+
+    pub fn full_page_down(&mut self, viewport_height: usize) {
+        let new_row = (self.cursor_row + viewport_height).min(self.buffer.len().saturating_sub(1));
+        self.cursor_row = new_row;
+        self.clamp_cursor();
+    }
+
+    pub fn full_page_up(&mut self, viewport_height: usize) {
+        let new_row = self.cursor_row.saturating_sub(viewport_height);
+        self.cursor_row = new_row;
+        self.clamp_cursor();
     }
 
     pub fn get_current_line(&self) -> &str {
@@ -152,6 +247,7 @@ impl EditorState {
     }
 
     pub fn delete_line(&mut self) {
+        self.save_undo_state();
         if self.buffer.len() == 1 {
             self.yank_register = vec![self.buffer[0].clone()];
             self.buffer[0].clear();
@@ -173,6 +269,7 @@ impl EditorState {
 
     pub fn paste_below(&mut self) {
         if !self.yank_register.is_empty() {
+            self.save_undo_state();
             for (i, line) in self.yank_register.iter().enumerate() {
                 self.buffer.insert(self.cursor_row + 1 + i, line.clone());
             }
@@ -183,6 +280,7 @@ impl EditorState {
     }
 
     pub fn insert_char(&mut self, c: char) {
+        self.save_undo_state();
         let cursor_col = self.cursor_col;
         let line = self.get_current_line_mut();
         if cursor_col >= line.len() {
@@ -195,6 +293,7 @@ impl EditorState {
     }
 
     pub fn delete_char(&mut self) {
+        self.save_undo_state();
         let cursor_col = self.cursor_col;
         if cursor_col > 0 {
             let line = self.get_current_line_mut();
@@ -211,6 +310,7 @@ impl EditorState {
     }
 
     pub fn delete_char_at_cursor(&mut self) {
+        self.save_undo_state();
         let cursor_col = self.cursor_col;
         let line_len = self.get_current_line().len();
 
@@ -228,6 +328,7 @@ impl EditorState {
     }
 
     pub fn insert_newline(&mut self) {
+        self.save_undo_state();
         let cursor_col = self.cursor_col;
         let line = self.get_current_line_mut();
         let remainder = line.split_off(cursor_col);
@@ -345,14 +446,14 @@ pub fn render_editor(f: &mut Frame, area: Rect, editor: &EditorState) {
     f.set_cursor_position((cursor_x, cursor_y));
 }
 
-pub fn handle_editor_input(editor: &mut EditorState) -> Result<bool> {
+pub fn handle_editor_input(editor: &mut EditorState, viewport_height: usize) -> Result<bool> {
     if !event::poll(Duration::from_millis(100))? {
         return Ok(false);
     }
 
     if let Event::Key(key) = event::read()? {
         match editor.mode {
-            EditorMode::Normal => handle_normal_mode(editor, key),
+            EditorMode::Normal => handle_normal_mode(editor, key, viewport_height),
             EditorMode::Insert => handle_insert_mode(editor, key),
             EditorMode::Command | EditorMode::Search => handle_command_mode(editor, key),
         }
@@ -362,10 +463,25 @@ pub fn handle_editor_input(editor: &mut EditorState) -> Result<bool> {
     Ok(false)
 }
 
-fn handle_normal_mode(editor: &mut EditorState, key: KeyEvent) {
+fn handle_normal_mode(editor: &mut EditorState, key: KeyEvent, viewport_height: usize) {
     match key.code {
         KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
             editor.should_quit = true;
+        }
+        KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            editor.page_down(viewport_height);
+        }
+        KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            editor.page_up(viewport_height);
+        }
+        KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            editor.full_page_down(viewport_height);
+        }
+        KeyCode::Char('b') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            editor.full_page_up(viewport_height);
+        }
+        KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+            editor.redo();
         }
         KeyCode::Char('h') | KeyCode::Left => editor.move_cursor_left(),
         KeyCode::Char('j') | KeyCode::Down => editor.move_cursor_down(),
@@ -405,6 +521,9 @@ fn handle_normal_mode(editor: &mut EditorState, key: KeyEvent) {
         }
         KeyCode::Char('x') => {
             editor.delete_char_at_cursor();
+        }
+        KeyCode::Char('u') => {
+            editor.undo();
         }
         KeyCode::Char(':') => {
             editor.mode = EditorMode::Command;

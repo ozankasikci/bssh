@@ -99,15 +99,17 @@ async fn open_in_editor(
     let mut editor = EditorState::new(filename.to_string(), remote_path.to_string(), content);
 
     let mut saved = false;
+    let mut viewport_height = 20; // Default
 
     loop {
         tui.terminal.draw(|f| {
             let area = f.area();
-            editor.update_scroll(area.height.saturating_sub(2) as usize);
+            viewport_height = area.height.saturating_sub(2) as usize;
+            editor.update_scroll(viewport_height);
             render_editor(f, area, &editor);
         })?;
 
-        if handle_editor_input(&mut editor)? {
+        if handle_editor_input(&mut editor, viewport_height)? {
             // Check if we need to save
             if editor.status_message == "Saving..." {
                 let content = editor.buffer.join("\n");
