@@ -113,8 +113,8 @@ async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: Str
                         // Suspend TUI (exits alternate screen, disables raw mode)
                         tui.restore()?;
 
-                        // Execute editor on remote server
-                        match ssh_client.execute_interactive(&command).await {
+                        // Execute editor on remote server using system ssh (cleaner!)
+                        match ssh_client.execute_interactive_external(&command) {
                             Ok(_) => {
                                 app.set_status(format!("Closed: {}", file.name));
                             }

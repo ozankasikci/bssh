@@ -7,6 +7,13 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+pub struct ConnectionInfo {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub key_path: Option<std::path::PathBuf>,
+}
+
 struct Client;
 
 #[async_trait::async_trait]
@@ -23,6 +30,7 @@ impl client::Handler for Client {
 
 pub struct SshClient {
     session: Handle<Client>,
+    pub connection_info: ConnectionInfo,
 }
 
 impl SshClient {
@@ -42,14 +50,14 @@ impl SshClient {
             .await
             .context("Failed to connect to SSH server")?;
 
-        let key_path = key_path
+        let key_path_buf = key_path
             .map(|p| p.to_path_buf())
             .unwrap_or_else(|| {
                 let home = dirs::home_dir().expect("Could not find home directory");
                 home.join(".ssh/id_rsa")
             });
 
-        let key_pair = russh_keys::load_secret_key(&key_path, None)
+        let key_pair = russh_keys::load_secret_key(&key_path_buf, None)
             .context("Failed to load SSH key")?;
 
         let auth_res = session
@@ -61,7 +69,14 @@ impl SshClient {
             anyhow::bail!("Authentication failed");
         }
 
-        Ok(Self { session })
+        let connection_info = ConnectionInfo {
+            host: host.to_string(),
+            port,
+            username: username.to_string(),
+            key_path: Some(key_path_buf),
+        };
+
+        Ok(Self { session, connection_info })
     }
 
     pub async fn open_sftp(&mut self) -> Result<SftpSession> {
@@ -190,16 +205,51 @@ impl SshClient {
             }
         }
 
+        // Flush output one more time
+        stdout.flush().await?;
+
+        // Give stdin task a moment to finish processing
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
         // Abort stdin task
         stdin_task.abort();
 
-        // Disable raw mode (will be re-enabled by TUI::new())
+        // Flush any pending input BEFORE disabling raw mode
+        use crossterm::event::{self, Event};
+        while event::poll(std::time::Duration::from_millis(50))? {
+            let _ = event::read(); // Consume and discard
+        }
+
+        // Now disable raw mode (will be re-enabled by TUI::new())
         terminal::disable_raw_mode()?;
 
-        // Flush any remaining input to prevent escape sequences leaking
-        use crossterm::event::{self, Event};
-        while event::poll(std::time::Duration::from_millis(10))? {
-            event::read()?; // Consume and discard
+        // One more flush after disabling raw mode
+        while event::poll(std::time::Duration::from_millis(50))? {
+            let _ = event::read();
+        }
+
+        Ok(())
+    }
+
+    // Simpler approach: use system ssh command
+    pub fn execute_interactive_external(&self, command: &str) -> Result<()> {
+        use std::process::Command;
+
+        let mut cmd = Command::new("ssh");
+
+        cmd.arg("-p").arg(self.connection_info.port.to_string());
+
+        if let Some(ref key) = self.connection_info.key_path {
+            cmd.arg("-i").arg(key);
+        }
+
+        cmd.arg(format!("{}@{}", self.connection_info.username, self.connection_info.host));
+        cmd.arg(command);
+
+        let status = cmd.status()?;
+
+        if !status.success() {
+            anyhow::bail!("Command failed with exit code: {:?}", status.code());
         }
 
         Ok(())
