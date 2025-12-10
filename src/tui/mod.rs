@@ -16,7 +16,7 @@ use ratatui::{
 use std::io;
 
 pub struct Tui {
-    terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    pub terminal: Terminal<CrosstermBackend<io::Stdout>>,
 }
 
 impl Tui {

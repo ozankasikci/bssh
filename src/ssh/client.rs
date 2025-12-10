@@ -139,9 +139,9 @@ impl SshClient {
     }
 
     pub async fn execute_interactive(&mut self, command: &str) -> Result<()> {
-        use crossterm::{execute, terminal};
+        use crossterm::terminal;
 
-        let mut channel = self
+        let channel = self
             .session
             .channel_open_session()
             .await
@@ -173,7 +173,7 @@ impl SshClient {
         terminal::enable_raw_mode()?;
 
         // Channel stream for reading/writing
-        let mut stream = channel.into_stream();
+        let stream = channel.into_stream();
         let (mut read_half, mut write_half) = tokio::io::split(stream);
 
         // Spawn task to forward stdin to remote
@@ -215,7 +215,7 @@ impl SshClient {
         stdin_task.abort();
 
         // Flush any pending input BEFORE disabling raw mode
-        use crossterm::event::{self, Event};
+        use crossterm::event::{self};
         while event::poll(std::time::Duration::from_millis(50))? {
             let _ = event::read(); // Consume and discard
         }

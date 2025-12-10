@@ -1,4 +1,5 @@
 mod app;
+mod editor;
 mod file_ops;
 mod ssh;
 mod tui;
@@ -6,10 +7,11 @@ mod tui;
 use anyhow::{Context, Result};
 use app::App;
 use clap::Parser;
+use editor::{load_file_content, save_file_content, EditorState, handle_editor_input, render_editor};
 use russh_sftp::client::SftpSession;
 use ssh::SshClient;
 use std::env;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tui::{handle_input, InputAction, Tui};
 
 #[derive(Parser)]
@@ -64,7 +66,51 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: String) -> Result<()> {
+async fn open_in_editor(
+    sftp: &SftpSession,
+    remote_path: &str,
+    filename: &str,
+    tui: &mut Tui,
+) -> Result<bool> {
+    // Load file content
+    let content = load_file_content(sftp, remote_path).await?;
+    let mut editor = EditorState::new(filename.to_string(), remote_path.to_string(), content);
+
+    let mut saved = false;
+
+    loop {
+        tui.terminal.draw(|f| {
+            let area = f.area();
+            editor.update_scroll(area.height.saturating_sub(2) as usize);
+            render_editor(f, area, &editor);
+        })?;
+
+        if handle_editor_input(&mut editor)? {
+            // Check if we need to save
+            if editor.status_message == "Saving..." {
+                let content = editor.buffer.join("\n");
+                save_file_content(sftp, &editor.remote_path, &content).await?;
+                editor.modified = false;
+                editor.status_message = String::from("Saved");
+                saved = true;
+            } else if editor.status_message == "Saving and quitting..." {
+                let content = editor.buffer.join("\n");
+                save_file_content(sftp, &editor.remote_path, &content).await?;
+                editor.modified = false;
+                saved = true;
+                break;
+            }
+        }
+
+        if editor.should_quit {
+            break;
+        }
+    }
+
+    Ok(saved)
+}
+
+async fn run_app(ssh_client: SshClient, sftp: SftpSession, initial_path: String) -> Result<()> {
     let mut app = App::new();
     app.current_path = initial_path;
 
@@ -106,25 +152,19 @@ async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: Str
                             }
                         }
                     } else {
-                        // Open file in editor
-                        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
-                        let command = format!("{} '{}'", editor, file.path);
-
-                        // Suspend TUI (exits alternate screen, disables raw mode)
-                        tui.restore()?;
-
-                        // Execute editor on remote server using system ssh (cleaner!)
-                        match ssh_client.execute_interactive_external(&command) {
-                            Ok(_) => {
-                                app.set_status(format!("Closed: {}", file.name));
+                        // Open file in built-in editor
+                        match open_in_editor(&sftp, &file.path, &file.name, &mut tui).await {
+                            Ok(saved) => {
+                                if saved {
+                                    app.set_status(format!("Saved: {}", file.name));
+                                } else {
+                                    app.set_status(format!("Closed: {}", file.name));
+                                }
                             }
                             Err(e) => {
                                 app.set_status(format!("Editor error: {}", e));
                             }
                         }
-
-                        // Resume TUI (re-enters alternate screen, re-enables raw mode)
-                        tui = Tui::new()?;
                     }
                 }
             }
