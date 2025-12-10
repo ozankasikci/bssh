@@ -65,23 +65,52 @@ Options:
 |-----|--------|
 | `↑` / `k` | Move selection up |
 | `↓` / `j` | Move selection down |
-| `Enter` | Open directory / Edit file in $EDITOR |
+| `Enter` | Open directory / Edit file in built-in editor |
 | `d` | Download selected file |
 | `u` | Upload file (coming soon) |
 | `n` | Create new directory (coming soon) |
 | `r` | Rename file/directory (coming soon) |
-| `Del` / `x` | Delete selected file/directory |
+| `Del` | Delete selected file/directory |
 | `e` | Execute command (coming soon) |
 | `q` / `Ctrl+C` | Quit |
 
-## File Editing
+## Built-in Editor
 
-Press **Enter** on a file to open it in your preferred editor on the remote server. bssh will:
-1. Suspend the TUI
-2. Launch the editor specified by `$EDITOR` (defaults to `vim`)
-3. Resume the TUI when you exit the editor
+Press **Enter** on a file to open it in the built-in modal editor. The editor works like vim with the following keyboard shortcuts:
 
-The file is edited **directly on the remote server** - no download/upload needed!
+### Editor Keyboard Shortcuts
+
+**Normal Mode:**
+| Key | Action |
+|-----|--------|
+| `h` / `j` / `k` / `l` | Move cursor left/down/up/right |
+| `0` | Move to start of line |
+| `$` | Move to end of line |
+| `gg` | Move to start of file |
+| `G` | Move to end of file |
+| `i` | Enter insert mode at cursor |
+| `a` | Enter insert mode after cursor |
+| `o` | Open new line below and enter insert mode |
+| `dd` | Delete current line |
+| `yy` | Yank (copy) current line |
+| `p` | Paste below current line |
+| `x` | Delete character at cursor |
+| `:w` | Save file |
+| `:q` | Quit (warns if unsaved changes) |
+| `:wq` | Save and quit |
+| `:q!` | Force quit without saving |
+| `Ctrl+Q` | Quick quit |
+
+**Insert Mode:**
+| Key | Action |
+|-----|--------|
+| `Esc` | Return to normal mode |
+| Any character | Insert at cursor |
+| `Backspace` | Delete character before cursor |
+| `Enter` | Insert new line |
+| Arrow keys | Move cursor |
+
+The file is edited **directly on the remote server** via SFTP - no temporary files needed!
 
 ## Authentication
 

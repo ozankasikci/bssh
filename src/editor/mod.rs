@@ -210,6 +210,23 @@ impl EditorState {
         }
     }
 
+    pub fn delete_char_at_cursor(&mut self) {
+        let cursor_col = self.cursor_col;
+        let line_len = self.get_current_line().len();
+
+        if cursor_col < line_len {
+            let line = self.get_current_line_mut();
+            line.remove(cursor_col);
+            let new_len = line.len();
+            self.modified = true;
+
+            // Clamp cursor if we deleted the last character
+            if self.mode == EditorMode::Normal && cursor_col >= new_len && new_len > 0 {
+                self.cursor_col = new_len - 1;
+            }
+        }
+    }
+
     pub fn insert_newline(&mut self) {
         let cursor_col = self.cursor_col;
         let line = self.get_current_line_mut();
@@ -385,6 +402,9 @@ fn handle_normal_mode(editor: &mut EditorState, key: KeyEvent) {
         }
         KeyCode::Char('p') => {
             editor.paste_below();
+        }
+        KeyCode::Char('x') => {
+            editor.delete_char_at_cursor();
         }
         KeyCode::Char(':') => {
             editor.mode = EditorMode::Command;
@@ -684,6 +704,68 @@ mod tests {
         assert_eq!(editor.buffer[0], "line");
         assert_eq!(editor.buffer[1], " 1");
         assert_eq!(editor.cursor_row, 1);
+        assert_eq!(editor.cursor_col, 0);
+    }
+
+    #[test]
+    fn test_delete_char_at_cursor() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 2; // At 'n' in "line 1"
+
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], "lie 1");
+        assert_eq!(editor.cursor_col, 2); // Cursor stays at same position
+        assert!(editor.modified);
+    }
+
+    #[test]
+    fn test_delete_char_at_cursor_end_of_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 5; // At '1' (last char in "line 1")
+
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], "line ");
+        assert_eq!(editor.cursor_col, 4); // Cursor clamped to new end
+    }
+
+    #[test]
+    fn test_delete_char_at_cursor_beyond_line() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 10; // Beyond line length
+
+        let original = editor.buffer[0].clone();
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], original); // No change
+        assert!(!editor.modified); // Not modified
+    }
+
+    #[test]
+    fn test_delete_char_at_cursor_empty_line() {
+        let mut editor = create_empty_editor();
+
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], ""); // Still empty
+        assert!(!editor.modified); // Not modified
+    }
+
+    #[test]
+    fn test_x_key_deletes_multiple_chars() {
+        let mut editor = create_test_editor();
+        editor.cursor_col = 0; // At 'l' in "line 1"
+
+        // Delete 'l'
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], "ine 1");
+        assert_eq!(editor.cursor_col, 0);
+
+        // Delete 'i'
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], "ne 1");
+        assert_eq!(editor.cursor_col, 0);
+
+        // Delete 'n'
+        editor.delete_char_at_cursor();
+        assert_eq!(editor.buffer[0], "e 1");
         assert_eq!(editor.cursor_col, 0);
     }
 
