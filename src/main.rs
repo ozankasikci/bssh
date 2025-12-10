@@ -59,12 +59,12 @@ async fn main() -> Result<()> {
 
     println!("Connected! Starting TUI...");
 
-    run_app(sftp, initial_path.to_string()).await?;
+    run_app(ssh_client, sftp, initial_path.to_string()).await?;
 
     Ok(())
 }
 
-async fn run_app(sftp: SftpSession, initial_path: String) -> Result<()> {
+async fn run_app(mut ssh_client: SshClient, sftp: SftpSession, initial_path: String) -> Result<()> {
     let mut app = App::new();
     app.current_path = initial_path;
 
@@ -105,6 +105,26 @@ async fn run_app(sftp: SftpSession, initial_path: String) -> Result<()> {
                                 app.set_status(format!("Error: {}", e));
                             }
                         }
+                    } else {
+                        // Open file in editor
+                        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
+                        let command = format!("{} '{}'", editor, file.path);
+
+                        // Suspend TUI
+                        tui.restore()?;
+
+                        // Execute editor on remote server
+                        match ssh_client.execute_interactive(&command).await {
+                            Ok(_) => {
+                                app.set_status(format!("Closed: {}", file.name));
+                            }
+                            Err(e) => {
+                                app.set_status(format!("Editor error: {}", e));
+                            }
+                        }
+
+                        // Resume TUI
+                        tui = Tui::new()?;
                     }
                 }
             }

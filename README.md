@@ -65,7 +65,7 @@ Options:
 |-----|--------|
 | `↑` / `k` | Move selection up |
 | `↓` / `j` | Move selection down |
-| `Enter` | Open directory / View file |
+| `Enter` | Open directory / Edit file in $EDITOR |
 | `d` | Download selected file |
 | `u` | Upload file (coming soon) |
 | `n` | Create new directory (coming soon) |
@@ -73,6 +73,15 @@ Options:
 | `Del` / `x` | Delete selected file/directory |
 | `e` | Execute command (coming soon) |
 | `q` / `Ctrl+C` | Quit |
+
+## File Editing
+
+Press **Enter** on a file to open it in your preferred editor on the remote server. bssh will:
+1. Suspend the TUI
+2. Launch the editor specified by `$EDITOR` (defaults to `vim`)
+3. Resume the TUI when you exit the editor
+
+The file is edited **directly on the remote server** - no download/upload needed!
 
 ## Authentication
 
@@ -110,9 +119,11 @@ Current features:
 - ✅ Directory navigation
 - ✅ File download
 - ✅ File/directory deletion
+- ✅ **File editing in remote editor** (vim/nano/etc)
 - ✅ SSH key authentication
 - ✅ Custom identity file support (-i flag)
 - ✅ Custom port support (-p flag)
+- ✅ Concurrent metadata fetching for fast navigation
 
 Coming soon:
 - ⏳ File upload

@@ -5,6 +5,7 @@ use russh_keys::key::PublicKey;
 use russh_sftp::client::SftpSession;
 use std::path::Path;
 use std::sync::Arc;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 struct Client;
 
@@ -120,5 +121,82 @@ impl SshClient {
         }
 
         Ok(output)
+    }
+
+    pub async fn execute_interactive(&mut self, command: &str) -> Result<()> {
+        use std::os::unix::io::AsRawFd;
+        use std::io::{Read, Write};
+
+        let mut channel = self
+            .session
+            .channel_open_session()
+            .await
+            .context("Failed to open channel")?;
+
+        // Request a PTY for interactive programs like vim
+        channel
+            .request_pty(
+                true,
+                "xterm-256color",
+                80,
+                24,
+                0,
+                0,
+                &[], // no terminal modes
+            )
+            .await
+            .context("Failed to request PTY")?;
+
+        channel
+            .exec(true, command)
+            .await
+            .context("Failed to execute command")?;
+
+        // Set terminal to raw mode for direct input
+        let stdin_fd = std::io::stdin().as_raw_fd();
+        let termios_original = termios::Termios::from_fd(stdin_fd)?;
+        let mut termios_raw = termios_original.clone();
+        termios::cfmakeraw(&mut termios_raw);
+        termios::tcsetattr(stdin_fd, termios::TCSANOW, &termios_raw)?;
+
+        // Channel stream for reading/writing
+        let mut stream = channel.into_stream();
+        let (mut read_half, mut write_half) = tokio::io::split(stream);
+
+        // Spawn task to forward stdin to remote
+        let stdin_task = tokio::spawn(async move {
+            let mut stdin = tokio::io::stdin();
+            let mut buf = [0u8; 4096];
+            loop {
+                match stdin.read(&mut buf).await {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => {
+                        if write_half.write_all(&buf[..n]).await.is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Forward remote output to stdout
+        let mut stdout = tokio::io::stdout();
+        let mut buf = [0u8; 4096];
+        loop {
+            match read_half.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    stdout.write_all(&buf[..n]).await?;
+                    stdout.flush().await?;
+                }
+            }
+        }
+
+        // Restore terminal
+        termios::tcsetattr(stdin_fd, termios::TCSANOW, &termios_original)?;
+
+        stdin_task.abort();
+
+        Ok(())
     }
 }
