@@ -1,4 +1,5 @@
 mod app;
+mod connections;
 mod editor;
 mod file_ops;
 mod ssh;
