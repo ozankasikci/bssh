@@ -11,7 +11,7 @@ use anyhow::{Context, Result};
 use app::App;
 use clap::Parser;
 use connection_selector::ConnectionSelector;
-use connections::load_connections;
+use connections::{add_connection, load_connections, SavedConnection};
 use editor::{load_file_content, save_file_content, EditorState, handle_editor_input, render_editor};
 use russh_sftp::client::SftpSession;
 use ssh::SshClient;
@@ -103,6 +103,22 @@ async fn main() -> Result<()> {
         .context("Failed to open SFTP session")?;
 
     println!("Connected! Starting TUI...");
+
+    // Save connection if --save flag was provided
+    if let Some(save_name) = cli.save_as {
+        let connection = SavedConnection::new(
+            save_name.clone(),
+            host.clone(),
+            port,
+            username.clone(),
+            identity_file.clone(),
+        );
+        if let Err(e) = add_connection(connection) {
+            eprintln!("Warning: Failed to save connection: {}", e);
+        } else {
+            println!("Connection saved as: {}", save_name);
+        }
+    }
 
     // Try to load saved state for this connection
     let (initial_path, initial_index) = if let Some(path_arg) = cli.path.as_deref() {
