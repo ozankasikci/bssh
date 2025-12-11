@@ -1,4 +1,5 @@
 mod app;
+mod connection_selector;
 mod connections;
 mod editor;
 mod file_ops;
