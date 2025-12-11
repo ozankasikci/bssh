@@ -12,7 +12,8 @@ A modern, user-friendly SSH file browser with a Terminal User Interface (TUI) bu
 - 🔐 SSH key-based authentication
 - 💾 Session persistence - remembers your last directory and cursor position
 - ✏️ Built-in modal text editor (vim-like)
-- 📝 ~/.ssh/config integration
+- 📝 Saved connection management - save and quickly reconnect to frequently used servers
+- 🔗 ~/.ssh/config integration
 
 ## Installation
 
@@ -45,18 +46,47 @@ bssh -i ~/.ssh/mykey.pem -p 2222 user@hostname /var/www
 bssh hostname
 ```
 
+### Saved Connections
+
+Save frequently used SSH connections for quick access:
+
+```bash
+# Save a connection while connecting
+bssh --save myserver user@hostname
+
+# Save with custom options
+bssh --save production -i ~/.ssh/prod_key.pem -p 2222 user@hostname
+
+# Run bssh with no arguments to see saved connections
+bssh
+# This shows an interactive list of all saved connections
+# Use arrow keys or j/k to navigate, Enter to connect, q to quit
+
+# Connect to a saved connection by name
+bssh myserver
+
+# Override saved connection settings
+bssh -p 2223 myserver  # Use different port than saved
+```
+
+Saved connections are stored in `~/.config/bssh/connections.json` and include:
+- Connection name
+- Host, port, username
+- Identity file path (if specified)
+
 ### Command-line Options
 
 ```
-Usage: bssh [OPTIONS] <DESTINATION> [PATH]
+Usage: bssh [OPTIONS] [DESTINATION] [PATH]
 
 Arguments:
-  <DESTINATION>  SSH connection string [user@]host[:port]
+  [DESTINATION]  SSH connection string [user@]host[:port] or saved connection name
   [PATH]         Initial remote directory path
 
 Options:
   -i, --identity <FILE>  Identity file (private key) for authentication
   -p, --port <PORT>      Port to connect to on the remote host
+      --save <NAME>      Save this connection for future use
   -h, --help             Print help
   -V, --version          Print version
 ```
