@@ -10,6 +10,8 @@ mod tui;
 use anyhow::{Context, Result};
 use app::App;
 use clap::Parser;
+use connection_selector::ConnectionSelector;
+use connections::load_connections;
 use editor::{load_file_content, save_file_content, EditorState, handle_editor_input, render_editor};
 use russh_sftp::client::SftpSession;
 use ssh::SshClient;
@@ -23,9 +25,9 @@ use tui::{handle_input, InputAction, Tui};
 #[command(about = "Better SSH - A modern SSH file browser with TUI", long_about = None)]
 #[command(version)]
 struct Cli {
-    /// SSH connection string [user@]host[:port]
+    /// SSH connection string [user@]host[:port] or saved connection name
     #[arg(value_name = "DESTINATION")]
-    destination: String,
+    destination: Option<String>,
 
     /// Initial remote directory path
     #[arg(value_name = "PATH")]
@@ -38,15 +40,53 @@ struct Cli {
     /// Port to connect to on the remote host
     #[arg(short = 'p', long = "port", value_name = "PORT")]
     port: Option<u16>,
+
+    /// Save this connection for future use
+    #[arg(long = "save", value_name = "NAME")]
+    save_as: Option<String>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let (username, host, default_port) = parse_connection_string(&cli.destination)?;
-    let port = cli.port.unwrap_or(default_port);
-    let key_path = cli.identity.as_deref();
+    // If no destination provided, show connection selector
+    let (username, host, port, identity_file) = if let Some(dest) = cli.destination {
+        // Try to find saved connection by name first
+        let saved_connections = load_connections().unwrap_or_default();
+        if let Some(conn) = saved_connections.iter().find(|c| c.name == dest) {
+            // Use saved connection
+            (
+                conn.username.clone(),
+                conn.host.clone(),
+                conn.port,
+                conn.identity_file.clone(),
+            )
+        } else {
+            // Parse as connection string
+            let (username, host, default_port) = parse_connection_string(&dest)?;
+            let port = cli.port.unwrap_or(default_port);
+            (username, host, port, cli.identity.clone())
+        }
+    } else {
+        // No destination - show connection selector
+        let connections = load_connections().unwrap_or_default();
+        let selector = ConnectionSelector::new(connections);
+
+        match selector.run()? {
+            Some(conn) => (
+                conn.username.clone(),
+                conn.host.clone(),
+                conn.port,
+                conn.identity_file.clone(),
+            ),
+            None => {
+                return Ok(());
+            }
+        }
+    };
+
+    let key_path = identity_file.as_deref();
 
     println!("Connecting to {}@{}:{}...", username, host, port);
     if let Some(key) = key_path {
