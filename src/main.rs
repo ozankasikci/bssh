@@ -5,6 +5,7 @@ mod editor;
 mod file_ops;
 mod ssh;
 mod state;
+mod shell;
 mod tui;
 
 use anyhow::{Context, Result};
