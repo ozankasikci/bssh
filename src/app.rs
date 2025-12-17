@@ -15,6 +15,7 @@ pub struct App {
     pub should_quit: bool,
     pub status_message: String,
     pub connection_string: String,
+    pub has_background_shell: bool,
 }
 
 impl App {
@@ -26,6 +27,7 @@ impl App {
             should_quit: false,
             status_message: String::new(),
             connection_string,
+            has_background_shell: false,
         }
     }
 
