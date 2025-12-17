@@ -4,16 +4,16 @@ A modern, user-friendly SSH file browser with a Terminal User Interface (TUI) bu
 
 ## Features
 
-- 📁 Visual file browsing on remote servers
-- 🚀 Fast and lightweight
-- ⌨️ Keyboard-driven navigation
-- 📥 Download files from remote server
-- 🗑️ Delete files and directories
-- 🔐 SSH key-based authentication
-- 💾 Session persistence - remembers your last directory and cursor position
-- ✏️ Built-in modal text editor (vim-like)
-- 📝 Saved connection management - save and quickly reconnect to frequently used servers
-- 🔗 ~/.ssh/config integration
+- Visual file browsing on remote servers
+- Fast and lightweight
+- Keyboard-driven navigation (vim-style)
+- Download files from remote server
+- Delete files and directories
+- SSH key-based authentication
+- Session persistence - remembers your last directory and cursor position
+- Built-in modal text editor (vim-like)
+- Saved connection management - save and quickly reconnect to frequently used servers
+- ~/.ssh/config integration
 
 ## Installation
 
@@ -196,28 +196,16 @@ Host myserver
 - **Terminal Backend**: [crossterm](https://github.com/crossterm-rs/crossterm) - Cross-platform terminal manipulation
 - **Async Runtime**: [tokio](https://tokio.rs) - Asynchronous runtime
 
-## Development Status
+## Roadmap
 
-Current features:
-- ✅ File browsing
-- ✅ Directory navigation
-- ✅ File download
-- ✅ File/directory deletion
-- ✅ **File editing in remote editor** (vim/nano/etc)
-- ✅ SSH key authentication
-- ✅ Custom identity file support (-i flag)
-- ✅ Custom port support (-p flag)
-- ✅ Concurrent metadata fetching for fast navigation
-
-Coming soon:
-- ⏳ File upload
-- ⏳ File rename
-- ⏳ Create directories
-- ⏳ Execute remote commands
-- ⏳ File viewing
-- ⏳ Search functionality
-- ⏳ Multiple file selection
-- ⏳ File permissions editing
+Planned features:
+- File upload
+- File rename
+- Create directories
+- Execute remote commands
+- Search functionality
+- Multiple file selection
+- File permissions editing
 
 ## License
 
