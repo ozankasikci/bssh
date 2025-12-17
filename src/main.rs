@@ -201,7 +201,8 @@ async fn run_app(
     initial_path: String,
     initial_index: usize,
 ) -> Result<()> {
-    let mut app = App::new();
+    let connection_string = format!("{}@{}:{}", username, host, port);
+    let mut app = App::new(connection_string);
     app.current_path = initial_path;
     app.selected_index = initial_index;
 

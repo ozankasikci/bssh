@@ -14,16 +14,18 @@ pub struct App {
     pub selected_index: usize,
     pub should_quit: bool,
     pub status_message: String,
+    pub connection_string: String,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(connection_string: String) -> Self {
         Self {
             current_path: String::from("/"),
             files: Vec::new(),
             selected_index: 0,
             should_quit: false,
             status_message: String::new(),
+            connection_string,
         }
     }
 

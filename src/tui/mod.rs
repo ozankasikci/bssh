@@ -71,8 +71,7 @@ fn ui(f: &mut Frame, app: &App) {
 fn render_header(f: &mut Frame, area: Rect, app: &App) {
     let header = Paragraph::new(vec![
         Line::from(vec![
-            Span::styled("bssh", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
-            Span::raw(" - Better SSH File Browser"),
+            Span::styled(&app.connection_string, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
             Span::styled("Path: ", Style::default().fg(Color::Yellow)),
@@ -83,7 +82,7 @@ fn render_header(f: &mut Frame, area: Rect, app: &App) {
             Span::raw("Enter=Open  d=Download  Del=Delete  q=Quit"),
         ]),
     ])
-    .block(Block::default().borders(Borders::ALL).title("Info"));
+    .block(Block::default().borders(Borders::ALL).title("bssh"));
 
     f.render_widget(header, area);
 }
