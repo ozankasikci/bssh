@@ -69,9 +69,16 @@ fn ui(f: &mut Frame, app: &App) {
 }
 
 fn render_header(f: &mut Frame, area: Rect, app: &App) {
+    let shell_indicator = if app.has_background_shell {
+        " [shell]"
+    } else {
+        ""
+    };
+
     let header = Paragraph::new(vec![
         Line::from(vec![
             Span::styled(&app.connection_string, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::styled(shell_indicator, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)),
         ]),
         Line::from(vec![
             Span::styled("Path: ", Style::default().fg(Color::Yellow)),
@@ -79,7 +86,7 @@ fn render_header(f: &mut Frame, area: Rect, app: &App) {
         ]),
         Line::from(vec![
             Span::styled("Actions: ", Style::default().fg(Color::Green)),
-            Span::raw("Enter=Open  d=Download  Del=Delete  q=Quit"),
+            Span::raw("Enter=Open  d=Download  Del=Delete  Ctrl+s=Shell  q=Quit"),
         ]),
     ])
     .block(Block::default().borders(Borders::ALL).title("bssh"));
