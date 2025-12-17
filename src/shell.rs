@@ -38,7 +38,7 @@ impl ShellSession {
         // Start shell with cd to initial directory
         let shell_cmd = format!("cd {} && exec $SHELL -l", shell_escape(initial_dir));
         channel
-            .exec(true, shell_cmd)
+            .exec(true, shell_cmd.as_str())
             .await
             .context("Failed to start shell")?;
 
@@ -98,6 +98,7 @@ impl ShellSession {
                                 break Ok(true);
                             }
                             write_half.write_all(&stdin_buf[..n]).await?;
+                            write_half.flush().await?;
                         }
                         Err(_) => continue,
                     }
