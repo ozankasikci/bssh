@@ -15,6 +15,7 @@ use connection_selector::ConnectionSelector;
 use connections::{add_connection, load_connections, SavedConnection};
 use editor::{load_file_content, save_file_content, EditorState, handle_editor_input, render_editor};
 use russh_sftp::client::SftpSession;
+use shell::ShellSession;
 use ssh::SshClient;
 use state::SessionState;
 use std::env;
@@ -147,6 +148,47 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+async fn enter_shell_mode(
+    ssh_client: &mut SshClient,
+    shell_session: &mut Option<ShellSession>,
+    current_path: &str,
+    tui: &mut Tui,
+) -> Result<bool> {
+    // Leave TUI alternate screen for shell
+    tui.restore()?;
+
+    // Enable raw mode for shell I/O
+    crossterm::terminal::enable_raw_mode()?;
+
+    // Create new shell if none exists
+    if shell_session.is_none() {
+        *shell_session = Some(ShellSession::new(&ssh_client.session, current_path).await?);
+    }
+
+    let session = shell_session.as_mut().unwrap();
+
+    // Update terminal size in case it changed
+    session.update_size().await?;
+
+    // Run shell until toggle or exit
+    let toggled_back = session.run().await?;
+
+    // Disable raw mode before returning to TUI
+    crossterm::terminal::disable_raw_mode()?;
+
+    // Flush any pending input
+    while crossterm::event::poll(std::time::Duration::from_millis(50))? {
+        let _ = crossterm::event::read();
+    }
+
+    if !toggled_back {
+        // Shell exited, clear session
+        *shell_session = None;
+    }
+
+    Ok(toggled_back || shell_session.is_some())
+}
+
 async fn open_in_editor(
     sftp: &SftpSession,
     remote_path: &str,
@@ -194,7 +236,7 @@ async fn open_in_editor(
 }
 
 async fn run_app(
-    _ssh_client: SshClient,
+    mut ssh_client: SshClient,
     sftp: SftpSession,
     host: String,
     port: u16,
@@ -208,6 +250,7 @@ async fn run_app(
     app.selected_index = initial_index;
 
     let mut tui = Tui::new()?;
+    let mut shell_session: Option<ShellSession> = None;
 
     app.files = file_ops::list_directory(&sftp, &app.current_path)
         .await
@@ -334,7 +377,28 @@ async fn run_app(
                 app.set_status("Execute not yet implemented".to_string());
             }
             InputAction::ToggleShell => {
-                app.set_status("Shell mode not yet implemented".to_string());
+                match enter_shell_mode(
+                    &mut ssh_client,
+                    &mut shell_session,
+                    &app.current_path,
+                    &mut tui,
+                ).await {
+                    Ok(_) => {
+                        // Reinitialize TUI after shell mode
+                        tui = Tui::new()?;
+                        app.has_background_shell = shell_session.is_some();
+                        if shell_session.is_none() {
+                            app.set_status("Shell exited".to_string());
+                        }
+                    }
+                    Err(e) => {
+                        // Reinitialize TUI on error too
+                        tui = Tui::new()?;
+                        app.set_status(format!("Shell error: {}", e));
+                        shell_session = None;
+                        app.has_background_shell = false;
+                    }
+                }
             }
             InputAction::Quit => {
                 app.quit();

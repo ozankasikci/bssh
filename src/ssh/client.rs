@@ -14,7 +14,7 @@ pub struct ConnectionInfo {
     pub key_path: Option<std::path::PathBuf>,
 }
 
-struct Client;
+pub struct Client;
 
 #[async_trait::async_trait]
 impl client::Handler for Client {
@@ -28,8 +28,10 @@ impl client::Handler for Client {
     }
 }
 
+pub type SshSession = Handle<Client>;
+
 pub struct SshClient {
-    session: Handle<Client>,
+    pub session: Handle<Client>,
     pub connection_info: ConnectionInfo,
 }
 

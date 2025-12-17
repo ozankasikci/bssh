@@ -3,6 +3,7 @@ use crossterm::terminal;
 use russh::Channel;
 use russh::ChannelStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crate::ssh::client::SshSession;
 
 pub struct ShellSession {
     channel: Option<Channel<russh::client::Msg>>,
@@ -12,7 +13,7 @@ pub struct ShellSession {
 
 impl ShellSession {
     pub async fn new(
-        session: &russh::client::Handle<impl russh::client::Handler>,
+        session: &SshSession,
         initial_dir: &str,
     ) -> Result<Self> {
         let channel = session
