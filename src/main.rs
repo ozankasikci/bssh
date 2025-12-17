@@ -332,6 +332,9 @@ async fn run_app(
             InputAction::Execute => {
                 app.set_status("Execute not yet implemented".to_string());
             }
+            InputAction::ToggleShell => {
+                app.set_status("Shell mode not yet implemented".to_string());
+            }
             InputAction::Quit => {
                 app.quit();
             }

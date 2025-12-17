@@ -199,6 +199,7 @@ pub enum InputAction {
     Rename,
     Delete,
     Execute,
+    ToggleShell,
     Quit,
     None,
 }
@@ -217,6 +218,9 @@ pub fn handle_input() -> Result<InputAction> {
                 KeyCode::Delete | KeyCode::Char('x') => InputAction::Delete,
                 KeyCode::Char('e') => InputAction::Execute,
                 KeyCode::Char('q') => InputAction::Quit,
+                KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    InputAction::ToggleShell
+                }
                 KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     InputAction::Quit
                 }
