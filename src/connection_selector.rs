@@ -48,9 +48,10 @@ impl ConnectionSelector {
 
             if let Event::Key(key) = event::read()? {
                 match key.code {
-                    KeyCode::Char('q')
-                    | KeyCode::Esc
-                    | KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    KeyCode::Char('q') | KeyCode::Esc => {
+                        return Ok(None);
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Ok(None);
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
