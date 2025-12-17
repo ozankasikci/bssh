@@ -216,7 +216,8 @@ pub fn handle_input() -> Result<InputAction> {
                 KeyCode::Char('r') => InputAction::Rename,
                 KeyCode::Delete | KeyCode::Char('x') => InputAction::Delete,
                 KeyCode::Char('e') => InputAction::Execute,
-                KeyCode::Char('q') | KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                KeyCode::Char('q') => InputAction::Quit,
+                KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     InputAction::Quit
                 }
                 _ => InputAction::None,
