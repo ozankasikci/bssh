@@ -12,6 +12,7 @@ A modern, user-friendly SSH file browser with a Terminal User Interface (TUI) bu
 - SSH key-based authentication
 - Session persistence - remembers your last directory and cursor position
 - Built-in modal text editor (vim-like)
+- Interactive shell mode - toggle between file browser and full shell with Ctrl+s
 - Saved connection management - save and quickly reconnect to frequently used servers
 - ~/.ssh/config integration
 
@@ -104,7 +105,17 @@ Options:
 | `r` | Rename file/directory (coming soon) |
 | `Del` | Delete selected file/directory |
 | `e` | Execute command (coming soon) |
+| `Ctrl+s` | Toggle shell mode |
 | `q` / `Ctrl+C` | Quit |
+
+### Shell Mode
+
+Press `Ctrl+s` to toggle into an interactive shell session. The shell starts in your currently browsed directory.
+
+- The shell persists in the background when you toggle back to the file browser
+- A `[shell]` indicator appears in the header when a shell session is active
+- Press `Ctrl+s` again to return to your shell session
+- Type `exit` in the shell to close it and return to browsing
 
 ## Built-in Editor
 
