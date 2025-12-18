@@ -246,6 +246,220 @@ impl EditorState {
         self.move_to_line_end();
     }
 
+    fn is_word_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
+
+    /// Move forward to start of next word (vim 'w')
+    pub fn move_word_forward(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        // Skip current word characters
+        while col < chars.len() && Self::is_word_char(chars[col]) {
+            col += 1;
+        }
+        // Skip non-word, non-space characters (punctuation)
+        while col < chars.len() && !Self::is_word_char(chars[col]) && !chars[col].is_whitespace() {
+            col += 1;
+        }
+        // Skip whitespace
+        while col < chars.len() && chars[col].is_whitespace() {
+            col += 1;
+        }
+
+        if col >= chars.len() {
+            // Move to next line if available
+            if self.cursor_row < self.buffer.len() - 1 {
+                self.cursor_row += 1;
+                self.cursor_col = 0;
+                // Skip leading whitespace on new line
+                let new_line: Vec<char> = self.get_current_line().chars().collect();
+                while self.cursor_col < new_line.len() && new_line[self.cursor_col].is_whitespace() {
+                    self.cursor_col += 1;
+                }
+            }
+        } else {
+            self.cursor_col = col;
+        }
+        self.clamp_cursor();
+    }
+
+    /// Move backward to start of previous word (vim 'b')
+    pub fn move_word_backward(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        if col == 0 {
+            // Move to previous line
+            if self.cursor_row > 0 {
+                self.cursor_row -= 1;
+                let prev_line = self.get_current_line();
+                self.cursor_col = prev_line.len().saturating_sub(1);
+                self.move_word_backward();
+            }
+            return;
+        }
+
+        col = col.saturating_sub(1);
+
+        // Skip whitespace backwards
+        while col > 0 && chars[col].is_whitespace() {
+            col -= 1;
+        }
+        // Skip non-word chars backwards
+        if col > 0 && !Self::is_word_char(chars[col]) {
+            while col > 0 && !Self::is_word_char(chars[col]) && !chars[col].is_whitespace() {
+                col -= 1;
+            }
+            if Self::is_word_char(chars[col]) || chars[col].is_whitespace() {
+                col += 1;
+            }
+        } else {
+            // Skip word chars backwards
+            while col > 0 && Self::is_word_char(chars[col - 1]) {
+                col -= 1;
+            }
+        }
+
+        self.cursor_col = col;
+        self.clamp_cursor();
+    }
+
+    /// Move forward to end of word (vim 'e')
+    pub fn move_word_end(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        if col < chars.len() {
+            col += 1; // Move at least one position
+        }
+
+        // Skip whitespace
+        while col < chars.len() && chars[col].is_whitespace() {
+            col += 1;
+        }
+
+        if col >= chars.len() {
+            // Move to next line
+            if self.cursor_row < self.buffer.len() - 1 {
+                self.cursor_row += 1;
+                self.cursor_col = 0;
+                self.move_word_end();
+                return;
+            }
+        } else if Self::is_word_char(chars[col]) {
+            // Move to end of word
+            while col < chars.len() - 1 && Self::is_word_char(chars[col + 1]) {
+                col += 1;
+            }
+            self.cursor_col = col;
+        } else {
+            // Move to end of non-word sequence
+            while col < chars.len() - 1 && !Self::is_word_char(chars[col + 1]) && !chars[col + 1].is_whitespace() {
+                col += 1;
+            }
+            self.cursor_col = col;
+        }
+        self.clamp_cursor();
+    }
+
+    /// Move forward to start of next WORD (vim 'W') - whitespace delimited
+    pub fn move_big_word_forward(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        // Skip non-whitespace
+        while col < chars.len() && !chars[col].is_whitespace() {
+            col += 1;
+        }
+        // Skip whitespace
+        while col < chars.len() && chars[col].is_whitespace() {
+            col += 1;
+        }
+
+        if col >= chars.len() {
+            if self.cursor_row < self.buffer.len() - 1 {
+                self.cursor_row += 1;
+                self.cursor_col = 0;
+                let new_line: Vec<char> = self.get_current_line().chars().collect();
+                while self.cursor_col < new_line.len() && new_line[self.cursor_col].is_whitespace() {
+                    self.cursor_col += 1;
+                }
+            }
+        } else {
+            self.cursor_col = col;
+        }
+        self.clamp_cursor();
+    }
+
+    /// Move backward to start of previous WORD (vim 'B')
+    pub fn move_big_word_backward(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        if col == 0 {
+            if self.cursor_row > 0 {
+                self.cursor_row -= 1;
+                let prev_line = self.get_current_line();
+                self.cursor_col = prev_line.len().saturating_sub(1);
+                self.move_big_word_backward();
+            }
+            return;
+        }
+
+        col = col.saturating_sub(1);
+
+        // Skip whitespace backwards
+        while col > 0 && chars[col].is_whitespace() {
+            col -= 1;
+        }
+        // Skip non-whitespace backwards
+        while col > 0 && !chars[col - 1].is_whitespace() {
+            col -= 1;
+        }
+
+        self.cursor_col = col;
+        self.clamp_cursor();
+    }
+
+    /// Move forward to end of WORD (vim 'E')
+    pub fn move_big_word_end(&mut self) {
+        let line = self.get_current_line();
+        let chars: Vec<char> = line.chars().collect();
+        let mut col = self.cursor_col;
+
+        if col < chars.len() {
+            col += 1;
+        }
+
+        // Skip whitespace
+        while col < chars.len() && chars[col].is_whitespace() {
+            col += 1;
+        }
+
+        if col >= chars.len() {
+            if self.cursor_row < self.buffer.len() - 1 {
+                self.cursor_row += 1;
+                self.cursor_col = 0;
+                self.move_big_word_end();
+                return;
+            }
+        } else {
+            // Move to end of WORD
+            while col < chars.len() - 1 && !chars[col + 1].is_whitespace() {
+                col += 1;
+            }
+            self.cursor_col = col;
+        }
+        self.clamp_cursor();
+    }
+
     pub fn delete_line(&mut self) {
         self.save_undo_state();
         if self.buffer.len() == 1 {
@@ -487,6 +701,12 @@ fn handle_normal_mode(editor: &mut EditorState, key: KeyEvent, viewport_height: 
         KeyCode::Char('j') | KeyCode::Down => editor.move_cursor_down(),
         KeyCode::Char('k') | KeyCode::Up => editor.move_cursor_up(),
         KeyCode::Char('l') | KeyCode::Right => editor.move_cursor_right(),
+        KeyCode::Char('w') => editor.move_word_forward(),
+        KeyCode::Char('b') => editor.move_word_backward(),
+        KeyCode::Char('e') => editor.move_word_end(),
+        KeyCode::Char('W') => editor.move_big_word_forward(),
+        KeyCode::Char('B') => editor.move_big_word_backward(),
+        KeyCode::Char('E') => editor.move_big_word_end(),
         KeyCode::Char('0') => editor.move_to_line_start(),
         KeyCode::Char('$') => editor.move_to_line_end(),
         KeyCode::Char('g') => {
