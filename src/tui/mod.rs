@@ -17,6 +17,7 @@ use std::io;
 
 pub struct Tui {
     pub terminal: Terminal<CrosstermBackend<io::Stdout>>,
+    restored: bool,
 }
 
 impl Tui {
@@ -27,7 +28,7 @@ impl Tui {
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
 
-        Ok(Self { terminal })
+        Ok(Self { terminal, restored: false })
     }
 
     pub fn draw(&mut self, app: &App) -> Result<()> {
@@ -36,6 +37,10 @@ impl Tui {
     }
 
     pub fn restore(&mut self) -> Result<()> {
+        if self.restored {
+            return Ok(());
+        }
+        self.restored = true;
         disable_raw_mode()?;
         execute!(
             self.terminal.backend_mut(),
