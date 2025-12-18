@@ -278,7 +278,19 @@ async fn run_app(
             InputAction::Enter => {
                 if let Some(file) = app.get_selected_file() {
                     if file.is_dir {
-                        let new_path = if file.name == ".." {
+                        let going_back = file.name == "..";
+                        // Remember current dir name to highlight when going back
+                        let prev_dir_name = if going_back {
+                            app.current_path
+                                .trim_end_matches('/')
+                                .rsplit('/')
+                                .next()
+                                .map(|s| s.to_string())
+                        } else {
+                            None
+                        };
+
+                        let new_path = if going_back {
                             get_parent_path(&app.current_path)
                         } else {
                             file.path.clone()
@@ -289,6 +301,12 @@ async fn run_app(
 
                         match file_ops::list_directory(&sftp, &app.current_path).await {
                             Ok(files) => {
+                                // If going back, find and select the previous directory
+                                if let Some(ref prev_name) = prev_dir_name {
+                                    if let Some(idx) = files.iter().position(|f| f.name == *prev_name) {
+                                        app.selected_index = idx;
+                                    }
+                                }
                                 app.files = files;
                                 app.set_status(String::new());
                             }
