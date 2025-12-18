@@ -157,6 +157,10 @@ async fn enter_shell_mode(
     // Leave TUI alternate screen for shell
     tui.restore()?;
 
+    // Clear screen for fresh shell view
+    print!("\x1B[2J\x1B[H");
+    std::io::Write::flush(&mut std::io::stdout())?;
+
     // Enable raw mode for shell I/O
     crossterm::terminal::enable_raw_mode()?;
 
