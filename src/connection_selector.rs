@@ -1,5 +1,6 @@
 use crate::connections::SavedConnection;
 use anyhow::Result;
+use arboard::Clipboard;
 use crossterm::event::{self, Event, KeyCode, KeyModifiers};
 use ratatui::{
     backend::CrosstermBackend,
@@ -10,10 +11,12 @@ use ratatui::{
     Frame, Terminal,
 };
 use std::io;
+use std::time::{Duration, Instant};
 
 pub struct ConnectionSelector {
     connections: Vec<SavedConnection>,
     selected_index: usize,
+    status_message: Option<(String, Instant)>,
 }
 
 impl ConnectionSelector {
@@ -21,6 +24,7 @@ impl ConnectionSelector {
         Self {
             connections,
             selected_index: 0,
+            status_message: None,
         }
     }
 
@@ -62,6 +66,24 @@ impl ConnectionSelector {
                     KeyCode::Down | KeyCode::Char('j') => {
                         if self.selected_index < self.connections.len() - 1 {
                             self.selected_index += 1;
+                        }
+                    }
+                    KeyCode::Char('c') => {
+                        let conn = &self.connections[self.selected_index];
+                        let ssh_cmd = conn.ssh_command();
+                        match Clipboard::new().and_then(|mut cb| cb.set_text(&ssh_cmd)) {
+                            Ok(_) => {
+                                self.status_message = Some((
+                                    format!("Copied: {}", ssh_cmd),
+                                    Instant::now(),
+                                ));
+                            }
+                            Err(_) => {
+                                self.status_message = Some((
+                                    "Failed to copy to clipboard".to_string(),
+                                    Instant::now(),
+                                ));
+                            }
                         }
                     }
                     KeyCode::Enter => {
@@ -129,21 +151,37 @@ impl ConnectionSelector {
 
         f.render_widget(list, chunks[1]);
 
-        // Footer
-        let footer = Paragraph::new(vec![
-            Line::from(vec![
-                Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
-                Span::raw(": Navigate  "),
-                Span::styled("Enter", Style::default().fg(Color::Yellow)),
-                Span::raw(": Connect  "),
-                Span::styled("q", Style::default().fg(Color::Yellow)),
-                Span::raw(": Quit"),
-            ]),
-        ])
-        .block(Block::default().borders(Borders::ALL).title("Help"))
-        .alignment(Alignment::Left);
+        // Footer - show status message if recent, otherwise show help
+        let footer_content = if let Some((ref msg, timestamp)) = self.status_message {
+            if timestamp.elapsed() < Duration::from_secs(2) {
+                Line::from(vec![
+                    Span::styled(msg.clone(), Style::default().fg(Color::Green)),
+                ])
+            } else {
+                Self::help_line()
+            }
+        } else {
+            Self::help_line()
+        };
+
+        let footer = Paragraph::new(vec![footer_content])
+            .block(Block::default().borders(Borders::ALL).title("Help"))
+            .alignment(Alignment::Left);
 
         f.render_widget(footer, chunks[2]);
+    }
+
+    fn help_line() -> Line<'static> {
+        Line::from(vec![
+            Span::styled("↑/↓", Style::default().fg(Color::Yellow)),
+            Span::raw(": Navigate  "),
+            Span::styled("c", Style::default().fg(Color::Yellow)),
+            Span::raw(": Copy SSH command  "),
+            Span::styled("Enter", Style::default().fg(Color::Yellow)),
+            Span::raw(": Connect  "),
+            Span::styled("q", Style::default().fg(Color::Yellow)),
+            Span::raw(": Quit"),
+        ])
     }
 }
 

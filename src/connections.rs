@@ -32,6 +32,14 @@ impl SavedConnection {
     pub fn display_name(&self) -> String {
         format!("{}@{}:{}", self.username, self.host, self.port)
     }
+
+    pub fn ssh_command(&self) -> String {
+        let mut cmd = format!("ssh -p {} {}@{}", self.port, self.username, self.host);
+        if let Some(ref identity_file) = self.identity_file {
+            cmd = format!("ssh -i {} -p {} {}@{}", identity_file.display(), self.port, self.username, self.host);
+        }
+        cmd
+    }
 }
 
 fn get_connections_file_path() -> Result<PathBuf> {
