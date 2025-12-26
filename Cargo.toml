@@ -1,7 +1,13 @@
 [package]
 name = "bssh"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+description = "A modern SSH file browser with TUI, featuring vim-style navigation, built-in editor, and saved connections"
+license = "MIT"
+repository = "https://github.com/ozankasikci/bssh"
+keywords = ["ssh", "sftp", "tui", "file-browser", "terminal"]
+categories = ["command-line-utilities", "network-programming"]
+readme = "README.md"
 
 [dependencies]
 russh = "0.45"
