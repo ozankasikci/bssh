@@ -18,9 +18,17 @@ A modern, user-friendly SSH file browser with a Terminal User Interface (TUI) bu
 
 ## Installation
 
+### From crates.io
+
+```bash
+cargo install betterssh
+```
+
+### From source
+
 ```bash
 cargo build --release
-sudo cp target/release/bssh /usr/local/bin/
+sudo cp target/release/betterssh /usr/local/bin/
 ```
 
 ## Usage
