@@ -1,5 +1,5 @@
 [package]
-name = "bssh"
+name = "betterssh"
 version = "0.2.0"
 edition = "2024"
 description = "A modern SSH file browser with TUI, featuring vim-style navigation, built-in editor, and saved connections"
