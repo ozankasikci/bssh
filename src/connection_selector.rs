@@ -59,6 +59,11 @@ impl ConnectionSelector {
         loop {
             terminal.draw(|f| self.render(f))?;
 
+            // Poll with timeout so status messages can auto-expire
+            if !event::poll(Duration::from_millis(100))? {
+                continue;
+            }
+
             if let Event::Key(key) = event::read()? {
                 // Handle edit mode input
                 if self.edit_form.is_some() {
