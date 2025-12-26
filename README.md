@@ -61,7 +61,7 @@ bssh --save production -i ~/.ssh/prod_key.pem -p 2222 user@hostname
 # Run bssh with no arguments to see saved connections
 bssh
 # This shows an interactive list of all saved connections
-# Use arrow keys or j/k to navigate, Enter to connect, q to quit
+# Use arrow keys or j/k to navigate, Enter to connect, c to copy SSH command, q to quit
 
 # Connect to a saved connection by name
 bssh myserver
